@@ -1,0 +1,55 @@
+#!/bin/env ruby
+
+require 'slop'
+require 'yaml'
+require 'seapig-client'
+require 'active_record'
+
+require 'seapig-postgresql-notifier'
+require 'seapig-router'
+
+
+
+OPTIONS = Slop.parse { |o|
+	o.string '-c', '--connect', "Seapig server address (default: ws://127.0.0.1:3001)", default: "ws://127.0.0.1:3001"
+	o.string '-d', '--database-url', 'Database URL (e.g. postgres://USER:PASS@PGHOST/DBNAME)'
+	o.string '-e', '--environment' , 'Rails environment to use when loading database config from config/database.yml'
+	o.on '-h', '--help' do puts o; exit end
+}
+
+if (not OPTIONS["database-url"]) and (not File.exist?("config/database.yml")) then puts "Either -d or config/database.yml is needed"; exit end
+database_config = (OPTIONS["database-url"] or YAML.load_file("config/database.yml")[(OPTIONS["environment"] or ENV["RAILS_ENV"] or "development")])
+ActiveRecord::Base.establish_connection(database_config)
+
+
+EM.run {
+
+	SeapigClient.new(OPTIONS["connect"],name: 'session-manager').slave('SeapigRouter::Session::*::Data').onchange { |session_data|
+		token = session_data["token"]
+		next if token != session_data.id.split('::')[2]
+		if not session = SeapigRouterSession.find_by(token: token)
+			begin
+				session_id = (('a'..'z').to_a + ('A'..'Z').to_a + (0..9).to_a).shuffle[0..11].join('')
+				session = SeapigRouterSession.create!(key: session_id, token: token)
+			rescue ActiveRecord::RecordNotUnique
+				retry #FIXME: DOS
+			end
+			puts "Created new session: "+session.key+"  for token: "+token
+		end
+		next if session_data["session_id"] and session.key != session_data["session_id"]
+
+		print "Saving session "+session.key+" states: "
+		max_state = session.seapig_router_session_states.order("state_id DESC").first
+		max_state_id = (max_state and max_state.state_id or -1)
+		session_data['states'].each_pair { |id, state|
+			if id.to_i > max_state_id
+				print ' '+id
+				SeapigRouterSessionState.create!(seapig_router_session_id: session.id, state_id: id, state: state)
+			end
+		}
+		puts
+		SeapigDependency.bump("SeapigRouter::Session::"+token)
+		SeapigDependency.bump("SeapigRouter::Session::"+session.key)
+	}
+
+}
