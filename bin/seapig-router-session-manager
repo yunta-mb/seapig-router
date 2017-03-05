@@ -12,8 +12,9 @@ require 'seapig-router'
 
 OPTIONS = Slop.parse { |o|
 	o.string '-c', '--connect', "Seapig server address (default: ws://127.0.0.1:3001)", default: "ws://127.0.0.1:3001"
-	o.string '-d', '--database-url', 'Database URL (e.g. postgres://USER:PASS@PGHOST/DBNAME)'
+	o.string '-b', '--database-url', 'Database URL (e.g. postgres://USER:PASS@PGHOST/DBNAME)'
 	o.string '-e', '--environment' , 'Rails environment to use when loading database config from config/database.yml'
+	o.bool '-d', '--debug', 'Show debug messages'
 	o.on '-h', '--help' do puts o; exit end
 }
 
@@ -24,7 +25,7 @@ ActiveRecord::Base.establish_connection(database_config)
 
 EM.run {
 
-	SeapigClient.new(OPTIONS["connect"],name: 'session-manager').slave('SeapigRouter::Session::*::Data').onchange { |session_data|
+	SeapigClient.new(OPTIONS["connect"], name: 'router-session-manager', debug: OPTIONS.debug?).slave('SeapigRouter::Session::*::Data').onchange { |session_data|
 		token = session_data["token"]
 		next if token != session_data.id.split('::')[2]
 		if not session = SeapigRouterSession.find_by(token: token)

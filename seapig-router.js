@@ -112,6 +112,8 @@
       })(this);
       window.onpopstate = (function(_this) {
         return function(event) {
+          var previous_state;
+          previous_state = _this.state_raw;
           _this.state_raw = JSON.parse(JSON.stringify(event.state));
           if (_this.state_raw.session_id == null) {
             _this.state_raw.session_id = _this.session_id;

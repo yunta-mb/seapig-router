@@ -52,6 +52,7 @@ class @SeapigRouter
 
 
                 window.onpopstate = (event) =>
+                        previous_state = @state_raw
                         @state_raw = JSON.parse(JSON.stringify(event.state))
                         @state_raw.session_id = @session_id if not @state_raw.session_id?
                         @state = @cast(JSON.parse(JSON.stringify(@state_raw)))
