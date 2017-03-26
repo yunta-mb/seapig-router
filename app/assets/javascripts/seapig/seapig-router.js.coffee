@@ -43,12 +43,14 @@ class @SeapigRouter
                         location_update(false) if @state_valid
 
 
-                document.onclick = (event) =>
+                document.addEventListener("click", (event) =>
+                        return true if not (event.button == 0)
                         href = (event.target.getAttribute("href") or "")
                         console.log('ROUTER: A-element clicked, changing location to:', href) if @debug
                         return true if not (href[0] == '?')
                         @navigate(href)
-                        false
+                        event.preventDefault()
+                        false)
 
 
                 window.onpopstate = (event) =>
